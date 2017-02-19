@@ -17,6 +17,8 @@ def dependently(style="google"):
         style_reader = style_mapping[style]
         arg_names = f.__code__.co_varnames
         requires, ensures = style_reader(f.__doc__)
+        requires = [compile(x, '<string>', 'eval') for x in requires]
+        ensures = [compile(x, '<string>', 'eval') for x in ensures]
 
         def wrapped(*args, **kwargs):
             for i, arg_name in enumerate(arg_names):
