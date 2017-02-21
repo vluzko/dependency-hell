@@ -54,7 +54,7 @@ def simple_sum(a: int, b: float, c: int):
 ## Caveats
 *Be careful*. There's a fair amount of magic going on here, debugging it will *not* be fun.
 
-* DO NOT create a condition with a side-effect. Mutating one of the function arguments (or the return value) should be fine, but anything else is a *bad* idea.
+* DO NOT create a condition with a side-effect or that mutates the argument. Any mutated arguments will stay mutated when they get passed to your function.
 * Honestly you should avoid creating conditions that mutate either. Just stick to pure expressions.
 * If your argument names clash with anything in the namespace of the dependently decorator, the code will raise an exception.
 * Don't do anything tricky. If you're messing with python internals or doing anything hacky, don't use this library.
