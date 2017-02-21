@@ -2,9 +2,50 @@ import copy
 from copy import deepcopy
 import re
 from typing import Tuple, List, Mapping, Callable
+from inspect import getclosurevars, getfullargspec, FullArgSpec
+import ipdb
+
+
+def create_locals(spec: FullArgSpec, all_args: tuple, all_kwargs: dict) -> dict:
+    """
+
+    Args:
+        spec:
+        all_args:
+        all_kwargs:
+
+    Returns:
+
+    """
+    context = {arg_name: val for arg_name, val in zip(spec.args, all_args)}
+    if spec.varargs:
+        context.update({spec.varargs: all_args[len(context):]})
+        context.update(spec.kwonlydefaults)
+        # var_kwargs = {k: v for k, v in all_kwargs.items() if k not in spec.kwonlyargs}
+        kwargs = {k: all_kwargs.get(k, spec.kwonlydefaults[k]) for k in spec.kwonlyargs}
+        context.update(kwargs)
+    elif spec.defaults:
+        number_kws = len(spec.defaults)
+        kwargs = {arg_name: all_kwargs.get(arg_name, val) for arg_name, val in zip(spec.args[-number_kws:], spec.defaults)}
+        context.update(kwargs)
+    else:
+        kwargs = {}
+    var_kwargs = {k: v for k, v in all_kwargs.items() if k not in kwargs}
+    if var_kwargs:
+        context[spec.varkw] = var_kwargs
+
+    return context
 
 
 def dependently(style="google"):
+    """
+
+    Args:
+        style:
+
+    Returns:
+
+    """
     def dependent(f):
         """
 
@@ -14,29 +55,32 @@ def dependently(style="google"):
         Returns:
 
         """
+        if not f.__doc__:
+            return f
+
         style_reader = style_mapping[style]
         arg_names = f.__code__.co_varnames
-        requires, ensures = style_reader(f.__doc__)
-        requires = [compile(x, '<string>', 'eval') for x in requires]
-        ensures = [compile(x, '<string>', 'eval') for x in ensures]
+
+        require_strings, ensure_strings = style_reader(f.__doc__)
+        requires = [compile(x, '<string>', 'eval') for x in require_strings]
+        ensures = [compile(x, '<string>', 'eval') for x in ensure_strings]
 
         def wrapped(*args, **kwargs):
-            for i, arg_name in enumerate(arg_names):
-                loc = locals()
-                glob = globals()
-                if arg_name in loc or arg_name in glob:
-                    raise OverwrittenVariableError("""The argument {} to the function {} is in the local or global environment of dependently.
-                    Currently this causes unknown behavior, so it's disallowed. Please rename the argument or remove the dependently call.
-                    """)
+            spec = getfullargspec(f)
+            closure = getclosurevars(f)
+            local_context = create_locals(spec, args, kwargs)
 
-                exec('{} = deepcopy(args[{}])'.format(arg_name, i))
+            global_context = closure.globals
+            global_context.update(closure.builtins)
+            global_context.update(closure.nonlocals)
+            # local_context = {arg_name: deepcopy(arg) for arg_name, arg in zip(arg_names, args)}
 
-            for requirement in requires:
-                assert eval(requirement), "Requirement failed: {}. Arguments: {}".format(requirement, args)
+            for requirement, string in zip(requires, require_strings):
+                assert eval(requirement, global_context, local_context), "Requirement failed: {}. Arguments: {}".format(string, args)
             ret = f(*args, **kwargs)
-
-            for guarantee in ensures:
-                assert eval(guarantee)
+            local_context['ret'] = ret
+            for guarantee, string in zip(ensures, ensure_strings):
+                assert eval(guarantee, global_context, local_context), "Guarantee failed: {}. Return value: {}".format(string, ret)
 
             return ret
         return wrapped

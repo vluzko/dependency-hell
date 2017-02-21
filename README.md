@@ -2,6 +2,8 @@
 
 "Dependent types" in Python.
 
+More accurately: dependently is a (simple) library for creating "contracts" for your functions. You write requirements and guarantees in the docstring of a function, wrap the function in the @dependently wrapper, and it will ensure those requirements and guarantees are met.
+
 ## Usage
 In the docstring of a function, insert a "Requires:" section or a "Ensures:" section.
 Then wrap the function in the dependently.dependently decorator.
