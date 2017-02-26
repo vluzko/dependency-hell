@@ -10,38 +10,47 @@ def create_locals(spec: FullArgSpec, all_args: tuple, all_kwargs: dict) -> dict:
     """
 
     Args:
-        spec:
-        all_args:
-        all_kwargs:
+        spec:       The full argument spec of a function.
+        all_args:   The positional arguments passed to that function.
+        all_kwargs: The keyword arguments passed to that function.
 
     Returns:
 
     """
     context = {arg_name: val for arg_name, val in zip(spec.args, all_args)}
     if spec.varargs:
-        context.update({spec.varargs: all_args[len(context):]})
-        context.update(spec.kwonlydefaults)
-        # var_kwargs = {k: v for k, v in all_kwargs.items() if k not in spec.kwonlyargs}
+        context[spec.varargs] = all_args[len(context):]
         kwargs = {k: all_kwargs.get(k, spec.kwonlydefaults[k]) for k in spec.kwonlyargs}
         context.update(kwargs)
     elif spec.defaults:
+        # Number of keywords.
         number_kws = len(spec.defaults)
-        kwargs = {arg_name: all_kwargs.get(arg_name, val) for arg_name, val in zip(spec.args[-number_kws:], spec.defaults)}
+        # Number of keywords passed by position.
+        number_positional = len(spec.args) - number_kws
+        if number_positional != len(all_args):
+            positional_kws = len(all_args) - number_positional
+            kwargs = {name: val for name, val in zip(spec.args[-positional_kws:], all_args[-positional_kws:])}
+            start = number_kws - positional_kws
+        else:
+            kwargs = {}
+            start = number_kws
+        kwargs.update({arg_name: all_kwargs.get(arg_name, val) for arg_name, val in zip(spec.args[-start:], spec.defaults[-start:])})
         context.update(kwargs)
     else:
         kwargs = {}
-    var_kwargs = {k: v for k, v in all_kwargs.items() if k not in kwargs}
+    var_kwargs = {k: all_kwargs[k] for k in all_kwargs if k not in kwargs}
     if var_kwargs:
         context[spec.varkw] = var_kwargs
 
     return context
 
 
-def dependently(style="google"):
+def depydent(style="google", type_checks=False):
     """
 
     Args:
-        style:
+        style:          The documentation style.
+        type_checks:    Whether or not to also run type checks (using the function's annotations).
 
     Returns:
 
@@ -59,7 +68,6 @@ def dependently(style="google"):
             return f
 
         style_reader = style_mapping[style]
-        arg_names = f.__code__.co_varnames
 
         require_strings, ensure_strings = style_reader(f.__doc__)
         requires = [compile(x, '<string>', 'eval') for x in require_strings]
@@ -73,7 +81,6 @@ def dependently(style="google"):
             global_context = closure.globals
             global_context.update(closure.builtins)
             global_context.update(closure.nonlocals)
-            # local_context = {arg_name: deepcopy(arg) for arg_name, arg in zip(arg_names, args)}
 
             for requirement, string in zip(requires, require_strings):
                 assert eval(requirement, global_context, local_context), "Requirement failed: {}. Arguments: {}".format(string, args)
