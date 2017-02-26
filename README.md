@@ -53,7 +53,6 @@ def simple_sum(a: int, b: float, c: int):
 
 ## Caveats
 *Be careful*. There's a fair amount of magic going on here, debugging it won't be fun.
-
 * DO NOT write unpure conditions. The arguments are not copied, if your condition mutates one of them it will remain mutated.
 * Don't wrap performance critical functions.
 * Don't do anything tricky. If you're messing with python internals or doing anything hacky, don't use this library.
