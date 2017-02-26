@@ -1,9 +1,12 @@
 import copy
 from copy import deepcopy
 import re
-from typing import Tuple, List, Mapping, Callable
+from typing import Tuple, List, Mapping, Callable, Dict
 from inspect import getclosurevars, getfullargspec, FullArgSpec
 import ipdb
+
+
+RETURN_PATTERN = re.compile(r'$return as (\w+)$')
 
 
 def create_locals(spec: FullArgSpec, all_args: tuple, all_kwargs: dict) -> dict:
@@ -64,34 +67,78 @@ def depydent(style="google", type_checks=False):
         Returns:
 
         """
-        if not f.__doc__:
-            return f
+        annotation_requirements = extract_annotations(getfullargspec(f).annotations)
+        compiled_annotations = {k: [compile(x, '<string>', 'eval') for x in v] for k, v in annotation_requirements.items()}
 
-        style_reader = style_mapping[style]
+        if f.__doc__:
+            style_reader = style_mapping[style]
 
-        require_strings, ensure_strings = style_reader(f.__doc__)
-        requires = [compile(x, '<string>', 'eval') for x in require_strings]
-        ensures = [compile(x, '<string>', 'eval') for x in ensure_strings]
+            require_strings, ensure_strings = style_reader(f.__doc__)
+            match = re.match(RETURN_PATTERN, ensure_strings[0] if len(ensure_strings) > 0 else "")
+            if match:
+                return_string = match.groups()[0]
+            else:
+                return_string = "ret"
+            requires = [compile(x, '<string>', 'eval') for x in require_strings]
+            ensures = [compile(x, '<string>', 'eval') for x in ensure_strings]
+        else:
+            requires = []
+            ensures = []
+            require_strings = []
+            ensure_strings = []
+            return_string = "ret"
 
         def wrapped(*args, **kwargs):
             spec = getfullargspec(f)
             closure = getclosurevars(f)
+
+            # Create locals
             local_context = create_locals(spec, args, kwargs)
 
+            # Create globals
             global_context = closure.globals
             global_context.update(closure.builtins)
             global_context.update(closure.nonlocals)
 
+            # Run Requires
             for requirement, string in zip(requires, require_strings):
                 assert eval(requirement, global_context, local_context), "Requirement failed: {}. Arguments: {}".format(string, args)
-            ret = f(*args, **kwargs)
-            local_context['ret'] = ret
-            for guarantee, string in zip(ensures, ensure_strings):
-                assert eval(guarantee, global_context, local_context), "Guarantee failed: {}. Return value: {}".format(string, ret)
 
-            return ret
+            # Run argument Requires
+            for argument, requirements in annotation_requirements.items():
+                if argument in local_context:
+                    for requirement, string in zip(compiled_annotations[argument], requirements):
+                        assert eval(requirement, global_context, local_context), "Annotation requirement failed: {}. Arguments: {}".format(string, args)
+
+            # Run Ensures
+            return_value = f(*args, **kwargs)
+            local_context[return_string] = return_value
+            for guarantee, string in zip(ensures, ensure_strings):
+                assert eval(guarantee, global_context, local_context), "Guarantee failed: {}. Return value: {}".format(string, return_value)
+
+            return return_value
         return wrapped
     return dependent
+
+
+def extract_annotations(annotations: dict) -> Dict[str, Tuple[str]]:
+    """Pulls requirements out of type annotations.
+    Takes the annotations from an inspect.FullArgSpec object.
+    Checks each annotation for docstrings, then checks each docstring for requirements.
+
+    Args:
+        annotations: A dictionary mapping argument names to their annotated types.
+
+    Returns:
+        A dictionary mapping arguments to their requirements.
+    """
+    requirements = {}
+
+    for argument, annotation in annotations.items():
+        if annotation.__doc__:
+            requires = tuple(string.replace('self', argument) for string in read_google_style(annotation.__doc__)[0])
+            requirements[argument] = requires
+    return requirements
 
 
 def read_google_style(docstring: str) -> Tuple[List[str], List[str]]:
@@ -107,7 +154,7 @@ def read_google_style(docstring: str) -> Tuple[List[str], List[str]]:
     def _read_section(section_title: str) -> List[str]:
         """Reads a section. Used for requires and ensures"""
         lines = []  # type: List[str]
-        title_pattern = re.compile('^([ \t]+)' + section_title + ':[ \t]*\n', re.MULTILINE)
+        title_pattern = re.compile('^([ \t]*)' + section_title + ':[ \t]*\n', re.MULTILINE)
         title_match = title_pattern.search(docstring)
 
         if title_match:
