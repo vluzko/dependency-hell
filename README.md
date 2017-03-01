@@ -2,11 +2,11 @@
 
 "Dependent types" in Python.
 
-More accurately: dependently is a (simple) library for creating "contracts" for your functions. You write requirements and guarantees in the docstring of a function, wrap the function in the @dependently wrapper, and it will ensure those requirements and guarantees are met.
+More accurately: depydent is a library for creating "contracts" for your functions. You write requirements and guarantees in the docstring of a function, wrap the function in the @depydent wrapper, and it will ensure those requirements and guarantees are met.
 
 ## Usage
 In the docstring of a function, insert a "Requires:" section or a "Ensures:" section.
-Then wrap the function in the dependently.dependently decorator.
+Then wrap the function in the depydent.depydent decorator.
 
 The section title must be followed by a newline.
 
@@ -14,7 +14,7 @@ Within each section, write any number of indented lines, where each line is a py
 It is encouraged but not mandatory that each line be a *boolean* expression, but this isn't
 enforced.
 
-Every time your function runs, the dependently decorator will assert each expression
+Every time your function runs, the depydent decorator will assert each expression
 in the "Requires" section before the function is called, and each expression in the
 "Ensures" section after it returns.
 
