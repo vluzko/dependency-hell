@@ -2,7 +2,7 @@
 
 "Dependent types" in Python.
 
-More accurately: depydent is a library for creating "contracts" for your functions. You write requirements and guarantees in the docstring of a function, wrap the function in the @depydent wrapper, and it will ensure those requirements and guarantees are met.
+More accurately: depydent is a library for creating "contracts" for your functions. You write requirements and guarantees in the docstring of a function, wrap the function in the @depydent decorator, and it will ensure those requirements and guarantees are met.
 
 ## Usage
 In the docstring of a function, insert a "Requires:" section or a "Ensures:" section.
