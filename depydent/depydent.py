@@ -111,10 +111,13 @@ def extract_annotations(annotations: Dict[str, type]) -> Dict[str, Tuple[str]]:
             requires = tuple(string.replace('self', argument) for string in read_google_style(expected_type.__doc__)[0])
 
         # Check if any superclasses have requirements.
-        for superclass in expected_type.__bases__:
-            additional_requirements = extract_annotations({argument: superclass})
-            if additional_requirements:
-                requires = requires + additional_requirements.get(argument, ())
+        # Not all valid annotations have a `__bases__` object. Types produced by `NewType`, for instance, are functions at runtime.
+        if hasattr(expected_type, "__bases__"):
+            for superclass in expected_type.__bases__:
+                additional_requirements = extract_annotations({argument: superclass})
+                if additional_requirements:
+                    requires = requires + additional_requirements.get(argument, ())
+
         if requires:
             requirements[argument] = requires
     return requirements

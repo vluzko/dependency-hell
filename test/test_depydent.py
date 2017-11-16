@@ -1,4 +1,4 @@
-import depydent
+from depydent import depydent
 import pytest
 
 
