@@ -11,8 +11,7 @@ Then wrap the function in the depydent.depydent decorator.
 The section title must be followed by a newline.
 
 Within each section, write any number of indented lines, where each line is a python expression.
-It is encouraged but not mandatory that each line be a *boolean* expression, but this isn't
-enforced.
+It is encouraged but not mandatory that each line be a *boolean* expression.
 
 Every time your function runs, the depydent decorator will assert each expression
 in the "Requires" section before the function is called, and each expression in the
@@ -52,7 +51,7 @@ def simple_sum(a: int, b: float, c: int):
 
 
 ## Caveats
-*Be careful*. There's a fair amount of magic going on here, debugging it won't be fun.
-* DO NOT write unpure conditions. The arguments are not copied, if your condition mutates one of them it will remain mutated.
-* Don't wrap performance critical functions.
-* Don't do anything tricky. If you're messing with python internals or doing anything hacky, don't use this library.
+Be careful. There's a fair amount of magic going on here, debugging it won't be fun.
+* DO NOT write impure conditions. The arguments are not copied, if your condition mutates one of them it will remain mutated.
+* Don't wrap performance critical functions. Depydent adds a fair amount of overhead.
+
