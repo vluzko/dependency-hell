@@ -1,59 +1,17 @@
-import copy
-from copy import deepcopy
 import re
 from typing import Tuple, List, Mapping, Callable, Dict
-from inspect import getclosurevars, getfullargspec, FullArgSpec
-import ipdb
-
+import inspect
 
 RETURN_PATTERN = re.compile(r'$return as (\w+)$')
-
-
-def create_locals(spec: FullArgSpec, all_args: tuple, all_kwargs: dict) -> dict:
-    """
-
-    Args:
-        spec:       The full argument spec of a function.
-        all_args:   The positional arguments passed to that function.
-        all_kwargs: The keyword arguments passed to that function.
-
-    Returns:
-
-    """
-    context = {arg_name: val for arg_name, val in zip(spec.args, all_args)}
-    if spec.varargs:
-        context[spec.varargs] = all_args[len(context):]
-        kwargs = {k: all_kwargs.get(k, spec.kwonlydefaults[k]) for k in spec.kwonlyargs}
-        context.update(kwargs)
-    elif spec.defaults:
-        # Number of keywords.
-        number_kws = len(spec.defaults)
-        # Number of keywords passed by position.
-        number_positional = len(spec.args) - number_kws
-        if number_positional != len(all_args):
-            positional_kws = len(all_args) - number_positional
-            kwargs = {name: val for name, val in zip(spec.args[-positional_kws:], all_args[-positional_kws:])}
-            start = number_kws - positional_kws
-        else:
-            kwargs = {}
-            start = number_kws
-        kwargs.update({arg_name: all_kwargs.get(arg_name, val) for arg_name, val in zip(spec.args[-start:], spec.defaults[-start:])})
-        context.update(kwargs)
-    else:
-        kwargs = {}
-    var_kwargs = {k: all_kwargs[k] for k in all_kwargs if k not in kwargs}
-    if var_kwargs:
-        context[spec.varkw] = var_kwargs
-
-    return context
 
 
 def depydent(style="google", type_checks=False):
     """
 
     Args:
-        style:          The documentation style.
-        type_checks:    Whether or not to also run type checks (using the function's annotations).
+        style: The documentation style.
+        type_checks: Whether or not to also run type checks (using the function's annotations).
+            Defaults to False, because it's assumed that mypy is in use.
 
     Returns:
 
@@ -67,7 +25,7 @@ def depydent(style="google", type_checks=False):
         Returns:
 
         """
-        annotation_requirements = extract_annotations(getfullargspec(f).annotations)
+        annotation_requirements = extract_annotations(f.__annotations__)
         compiled_annotations = {k: [compile(x, '<string>', 'eval') for x in v] for k, v in annotation_requirements.items()}
 
         if f.__doc__:
@@ -89,26 +47,39 @@ def depydent(style="google", type_checks=False):
             return_string = "ret"
 
         def wrapped(*args, **kwargs):
-            spec = getfullargspec(f)
-            closure = getclosurevars(f)
+            closure = inspect.getclosurevars(f)
 
             # Create locals
-            local_context = create_locals(spec, args, kwargs)
+            local_context = inspect.getcallargs(f, *args, **kwargs)
 
             # Create globals
             global_context = closure.globals
             global_context.update(closure.builtins)
             global_context.update(closure.nonlocals)
 
-            # Run Requires
+            # Run function Requires
             for requirement, string in zip(requires, require_strings):
                 assert eval(requirement, global_context, local_context), "Requirement failed: {}. Arguments: {}".format(string, args)
 
             # Run argument Requires
-            for argument, requirements in annotation_requirements.items():
-                if argument in local_context:
-                    for requirement, string in zip(compiled_annotations[argument], requirements):
-                        assert eval(requirement, global_context, local_context), "Annotation requirement failed: {}. Arguments: {}".format(string, args)
+            for argument in local_context:
+                # Optional, in case you want to use mypy.
+                if type_checks:
+                    expected_type = f.__annotations__.get(argument)
+                    if expected_type:
+                        try:
+                            error_message = "{arg} ({val}) is not an instance of {typ} and it should be.".format(arg=argument, val=local_context[argument], typ=expected_type)
+                            assert isinstance(local_context[argument], expected_type), error_message
+                        except TypeError:
+                            # Because of the way the `typing` library works, it's not really feasible to check that the argument has the correct *type*.
+                            # isinstance(val, Type) (where Type is defined by the `typing` library) will generate a TypeError.
+                            # This is deeply unfortunate but unavoidable.
+                            pass
+
+                requirements = annotation_requirements.get(argument, ())
+                compiled = compiled_annotations.get(argument, ())
+                for requirement, string in zip(compiled, requirements):
+                    assert eval(requirement, global_context, local_context), "Annotation requirement failed: {}. Arguments: {}".format(string, args)
 
             # Run Ensures
             return_value = f(*args, **kwargs)
@@ -121,7 +92,7 @@ def depydent(style="google", type_checks=False):
     return dependent
 
 
-def extract_annotations(annotations: dict) -> Dict[str, Tuple[str]]:
+def extract_annotations(annotations: Dict[str, type]) -> Dict[str, Tuple[str]]:
     """Pulls requirements out of type annotations.
     Takes the annotations from an inspect.FullArgSpec object.
     Checks each annotation for docstrings, then checks each docstring for requirements.
@@ -134,9 +105,17 @@ def extract_annotations(annotations: dict) -> Dict[str, Tuple[str]]:
     """
     requirements = {}
 
-    for argument, annotation in annotations.items():
-        if annotation.__doc__:
-            requires = tuple(string.replace('self', argument) for string in read_google_style(annotation.__doc__)[0])
+    for argument, expected_type in annotations.items():
+        requires = ()
+        if expected_type.__doc__:
+            requires = tuple(string.replace('self', argument) for string in read_google_style(expected_type.__doc__)[0])
+
+        # Check if any superclasses have requirements.
+        for superclass in expected_type.__bases__:
+            additional_requirements = extract_annotations({argument: superclass})
+            if additional_requirements:
+                requires = requires + additional_requirements.get(argument, ())
+        if requires:
             requirements[argument] = requires
     return requirements
 
