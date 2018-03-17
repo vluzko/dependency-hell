@@ -5,8 +5,8 @@ import inspect
 RETURN_PATTERN = re.compile(r'$return as (\w+)$')
 
 
-def depydent(style="google", type_checks=False):
-    """
+def depydent(style="google", type_checks=False) -> Callable[[Callable], Callable]:
+    """Create a decorator that will ensure pre- and post- conditions.
 
     Args:
         style: The documentation style.
@@ -14,10 +14,10 @@ def depydent(style="google", type_checks=False):
             Defaults to False, because it's assumed that mypy is in use.
 
     Returns:
-
+        The depydent decorator
     """
-    def dependent(f):
-        """
+    def decorator(f: Callable) -> Callable:
+        """The actual depydent decorator.
 
         Args:
             f: Function to wrap. Should have at least one of "Requires:" or "Ensures:" in its docstring.
@@ -89,11 +89,11 @@ def depydent(style="google", type_checks=False):
 
             return return_value
         return wrapped
-    return dependent
+    return decorator
 
 
 def extract_annotations(annotations: Dict[str, type]) -> Dict[str, Tuple[str]]:
-    """Pulls requirements out of type annotations.
+    """Pull requirements out of type annotations.
     Takes the annotations from an inspect.FullArgSpec object.
     Checks each annotation for docstrings, then checks each docstring for requirements.
 
